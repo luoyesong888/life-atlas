@@ -81,9 +81,8 @@ export default function AdminDashboard({ initialIdentity }: { initialIdentity: A
   const removeRecord = async (kind: "entry" | "goal" | "track", id: string, title: string) => {
     if (!window.confirm(`确定删除“${title}”吗？此操作无法撤销。`)) return;
     setDeleting(`${kind}-${id}`); setError("");
-    const endpoint = kind === "entry" ? "/api/entries" : kind === "goal" ? "/api/goals" : "/api/tracks";
     try {
-      const response = await fetch(`${endpoint}?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const response = await fetch(`/api/admin/records?kind=${kind}&id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!response.ok) throw new Error("删除失败，请稍后重试");
       await load();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "删除失败"); }
