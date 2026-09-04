@@ -1,8 +1,6 @@
 import { resolveAiProvider } from "@/app/lib/ai-provider-server";
-import { requireUserAccess } from "@/app/lib/user-access";
 
 export async function POST(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
   const provider = resolveAiProvider(request);
   if (!provider.apiKey) return Response.json({ ok: false, error: "请先输入 API Key" }, { status: 400 });
   if (!/^[a-zA-Z0-9._:-]{2,80}$/.test(provider.model)) return Response.json({ ok: false, error: "模型 ID 格式无效" }, { status: 400 });

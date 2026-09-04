@@ -15,37 +15,9 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 body { font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
 button, input, textarea, select { font: inherit; }
 button { color: inherit; }
-
-/* User preview access gate */
-.invite-gate { position: relative; width: 100vw; height: 100vh; display: grid; place-items: center; overflow: hidden; padding: 22px; background: radial-gradient(circle at 50% 38%, #173a42, #07171d 58%, #020a0e); color: #f4f0e7; isolation: isolate; }
-.invite-gate::before { content: ""; position: absolute; z-index: -3; inset: 0; background-image: radial-gradient(circle at 15% 18%, rgba(158,229,230,.65) 0 1px, transparent 1.7px), radial-gradient(circle at 78% 22%, rgba(255,255,255,.55) 0 1px, transparent 1.5px), radial-gradient(circle at 68% 77%, rgba(255,160,112,.5) 0 1px, transparent 1.6px); background-size: 280px 280px, 410px 410px, 520px 520px; opacity: .34; }
-.invite-gate::after { content: ""; position: absolute; z-index: -2; width: min(680px, 86vw); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 42% 36%, rgba(107,198,207,.24), rgba(7,25,31,.25) 42%, rgba(2,8,12,.86) 72%); box-shadow: inset -55px -35px 90px rgba(0,0,0,.55), 0 0 100px rgba(83,181,190,.11); }
-.invite-orbit { position: absolute; z-index: -1; left: 50%; top: 50%; border: 1px solid rgba(158,220,226,.13); border-radius: 50%; transform: translate(-50%, -50%) rotate(-14deg); }
-.invite-orbit.orbit-one { width: min(820px, 96vw); height: 280px; }
-.invite-orbit.orbit-two { width: min(620px, 80vw); height: 520px; transform: translate(-50%, -50%) rotate(32deg); }
-.invite-card { width: min(470px, 100%); overflow: hidden; border: 1px solid rgba(221,239,235,.17); border-radius: 24px; background: rgba(7,23,28,.78); box-shadow: 0 35px 110px rgba(0,0,0,.48); backdrop-filter: blur(24px); }
-.invite-brand { display: flex; align-items: center; gap: 10px; padding: 19px 22px; border-bottom: 1px solid rgba(221,239,235,.1); }
-.invite-brand > span { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid rgba(255,150,101,.42); border-radius: 50%; background: rgba(255,150,101,.08); color: var(--coral); }
-.invite-brand > div { display: grid; gap: 1px; }
-.invite-brand small { color: #6f8785; font-size: 6px; letter-spacing: .2em; }
-.invite-brand strong { font-size: 11px; letter-spacing: .08em; }
-.invite-copy { display: grid; justify-items: center; padding: 31px 30px 20px; text-align: center; }
-.invite-copy > span { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 13px; border-radius: 50%; background: rgba(255,150,101,.1); color: #efaa85; }
-.invite-copy > small { color: #d7906d; font-size: 6.5px; letter-spacing: .18em; }
-.invite-copy h1 { margin: 8px 0 7px; font-family: Georgia, "Songti SC", serif; font-size: 27px; font-weight: 500; }
-.invite-copy p { max-width: 330px; margin: 0; color: #7e9390; font-size: 8px; line-height: 1.75; }
-.invite-card form { display: grid; gap: 8px; padding: 0 30px 31px; }
-.invite-card form > label { color: #91a29f; font-size: 7.5px; }
-.invite-code-field { height: 48px; display: grid; grid-template-columns: 20px 1fr 39px; align-items: center; gap: 8px; padding-left: 14px; border: 1px solid rgba(221,239,235,.15); border-radius: 13px; background: rgba(255,255,255,.04); color: #788d89; }
-.invite-code-field:focus-within { border-color: rgba(255,150,101,.55); box-shadow: 0 0 0 3px rgba(255,150,101,.07); }
-.invite-code-field.error { border-color: rgba(223,103,89,.5); }
-.invite-code-field input { min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: #f1eee6; font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
-.invite-code-field input::placeholder { color: #60726f; letter-spacing: 0; }
-.invite-code-field button { width: 35px; height: 35px; display: grid; place-items: center; border: 0; border-radius: 10px; background: #efe7dc; color: #17302d; cursor: pointer; }
-.invite-code-field button:disabled { cursor: wait; opacity: .65; }
-.invite-card form > small { color: #657a77; font-size: 6.5px; text-align: center; }
-.invite-error { margin: 0; color: #e29a91; font-size: 7px; }
-.invite-gate > footer { position: absolute; bottom: 18px; color: rgba(201,220,216,.37); font-size: 6.5px; letter-spacing: .08em; }
+.visitor-session-loading { width: 100vw; height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 10px; background: radial-gradient(circle at 50% 42%, #173a42, #061116 66%); color: #8da19e; }
+.visitor-session-loading > span { width: 52px; height: 52px; display: grid; place-items: center; margin-bottom: 5px; border: 1px solid rgba(255,150,101,.42); border-radius: 50%; color: #f09b72; }
+.visitor-session-loading p { margin: 0; font-size: 10px; }
 
 .earth-app { position: relative; width: 100vw; height: 100vh; overflow: hidden; isolation: isolate; background: var(--night); }
 .earth-app::before { content: ""; position: absolute; z-index: 2; inset: 0; pointer-events: none; background-image: radial-gradient(circle at 12% 18%, rgba(141,224,229,.62) 0 1px, transparent 1.6px), radial-gradient(circle at 78% 13%, rgba(255,255,255,.5) 0 1px, transparent 1.4px), radial-gradient(circle at 87% 64%, rgba(126,202,211,.42) 0 1px, transparent 1.5px); background-size: 280px 280px, 410px 410px, 520px 520px; opacity: .22; mix-blend-mode: screen; }

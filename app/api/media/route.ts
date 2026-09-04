@@ -1,6 +1,6 @@
 import { ensureDatabase } from "@/db/bootstrap";
-import { requireUserAccess } from "@/app/lib/user-access";
 import { env } from "cloudflare:workers";
+import { ownerPattern, requireVisitorOwner } from "@/app/lib/visitor-session";
 
 const maxBytes = 75 * 1024 * 1024;
 const allowedPrefixes = ["image/", "video/", "audio/", "text/"];
@@ -11,14 +11,14 @@ function allowedType(contentType: string) {
 }
 
 export async function GET(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const params = new URL(request.url).searchParams;
   const id = params.get("id");
   const entryId = params.get("entryId");
   const entryIds = Array.from(new Set((params.get("entryIds") || "").split(",").map(value => value.trim()).filter(Boolean))).slice(0, 100);
   const db = await ensureDatabase();
   if (id) {
-    const media = await db.prepare("SELECT object_key AS objectKey, content_type AS contentType, file_name AS fileName FROM life_media WHERE id=?").bind(id).first<{ objectKey: string; contentType: string; fileName: string }>();
+    const media = await db.prepare("SELECT m.object_key AS objectKey, m.content_type AS contentType, m.file_name AS fileName FROM life_media m JOIN life_entries e ON e.id=m.entry_id WHERE m.id=? AND e.id LIKE ?").bind(id, ownerPattern(session.owner)).first<{ objectKey: string; contentType: string; fileName: string }>();
     if (!media) return new Response("Not found", { status: 404 });
     const object = await env.MEDIA.get(media.objectKey);
     if (!object) return new Response("Not found", { status: 404 });
@@ -26,16 +26,16 @@ export async function GET(request: Request) {
   }
   if (entryIds.length) {
     const placeholders = entryIds.map(() => "?").join(",");
-    const result = await db.prepare(`SELECT id, entry_id AS entryId, file_name AS fileName, content_type AS contentType, size, stage, captured_at AS capturedAt, latitude, longitude, created_at AS createdAt FROM life_media WHERE entry_id IN (${placeholders}) ORDER BY entry_id, CASE stage WHEN 'start' THEN 1 WHEN 'moment' THEN 2 ELSE 3 END, created_at`).bind(...entryIds).all();
+    const result = await db.prepare(`SELECT id, entry_id AS entryId, file_name AS fileName, content_type AS contentType, size, stage, captured_at AS capturedAt, latitude, longitude, created_at AS createdAt FROM life_media WHERE entry_id IN (${placeholders}) AND entry_id LIKE ? ORDER BY entry_id, CASE stage WHEN 'start' THEN 1 WHEN 'moment' THEN 2 ELSE 3 END, created_at`).bind(...entryIds, ownerPattern(session.owner)).all();
     return Response.json({ media: (result.results || []).map(item => ({ ...item, url: `/api/media?id=${item.id}` })) });
   }
   if (!entryId) return Response.json({ error: "缺少经历 ID" }, { status: 400 });
-  const result = await db.prepare(`SELECT id, entry_id AS entryId, file_name AS fileName, content_type AS contentType, size, stage, captured_at AS capturedAt, latitude, longitude, created_at AS createdAt FROM life_media WHERE entry_id=? ORDER BY CASE stage WHEN 'start' THEN 1 WHEN 'moment' THEN 2 ELSE 3 END, created_at`).bind(entryId).all();
+  const result = await db.prepare(`SELECT id, entry_id AS entryId, file_name AS fileName, content_type AS contentType, size, stage, captured_at AS capturedAt, latitude, longitude, created_at AS createdAt FROM life_media WHERE entry_id=? AND entry_id LIKE ? ORDER BY CASE stage WHEN 'start' THEN 1 WHEN 'moment' THEN 2 ELSE 3 END, created_at`).bind(entryId, ownerPattern(session.owner)).all();
   return Response.json({ media: (result.results || []).map(item => ({ ...item, url: `/api/media?id=${item.id}` })) });
 }
 
 export async function POST(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const formData = await request.formData();
   const file = formData.get("file");
   const entryId = String(formData.get("entryId") || "");
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   if (!allowedType(file.type || "application/octet-stream")) return Response.json({ error: "暂不支持这种文件类型" }, { status: 400 });
   if (!["start", "moment", "end"].includes(stage)) return Response.json({ error: "时间线阶段无效" }, { status: 400 });
   const db = await ensureDatabase();
-  const entry = await db.prepare("SELECT id FROM life_entries WHERE id=?").bind(entryId).first();
+  const entry = await db.prepare("SELECT id FROM life_entries WHERE id=? AND id LIKE ?").bind(entryId, ownerPattern(session.owner)).first();
   if (!entry) return Response.json({ error: "经历不存在" }, { status: 404 });
   const id = crypto.randomUUID();
   const objectKey = `${entryId}/${id}`;
@@ -61,12 +61,12 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少媒体 ID" }, { status: 400 });
   const db = await ensureDatabase();
-  const media = await db.prepare("SELECT object_key AS objectKey FROM life_media WHERE id=?").bind(id).first<{ objectKey: string }>();
+  const media = await db.prepare("SELECT m.object_key AS objectKey FROM life_media m JOIN life_entries e ON e.id=m.entry_id WHERE m.id=? AND e.id LIKE ?").bind(id, ownerPattern(session.owner)).first<{ objectKey: string }>();
   if (media) await env.MEDIA.delete(media.objectKey);
-  await db.prepare("DELETE FROM life_media WHERE id=?").bind(id).run();
+  if (media) await db.prepare("DELETE FROM life_media WHERE id=?").bind(id).run();
   return Response.json({ ok: true });
 }

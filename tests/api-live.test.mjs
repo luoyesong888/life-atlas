@@ -37,6 +37,12 @@ test("home and collection APIs respond", async () => {
   assert.ok(Array.isArray(goals.body.edges));
 });
 
+test("anonymous visitor session is available without a test code", async () => {
+  const session = await request("/api/session");
+  assert.equal(session.response.status, 200);
+  assert.equal(session.body.ready, true);
+});
+
 test("administrator console and overview API respond locally", async () => {
   const page = await fetch(`${baseUrl}/admin`);
   assert.equal(page.status, 200);
@@ -47,15 +53,6 @@ test("administrator console and overview API respond locally", async () => {
   assert.ok(Array.isArray(overview.body.entries));
   assert.ok(Array.isArray(overview.body.goals));
   assert.ok(Array.isArray(overview.body.mediaTypes));
-});
-
-test("user preview code creates an access session", async () => {
-  const rejected = await request("/api/access", { method: "POST", headers: jsonHeaders, body: JSON.stringify({ code: "WRONG-CODE" }) });
-  assert.equal(rejected.response.status, 401);
-  const accepted = await request("/api/access", { method: "POST", headers: jsonHeaders, body: JSON.stringify({ code: "LIFE-ATLAS-0904" }) });
-  assert.equal(accepted.response.status, 200);
-  assert.equal(accepted.body.authorized, true);
-  assert.match(accepted.response.headers.get("set-cookie") || "", /life_atlas_user_access=/);
 });
 
 test("entry and track validation rejects invalid input", async () => {

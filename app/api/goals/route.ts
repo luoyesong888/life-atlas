@@ -1,5 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
-import { requireUserAccess } from "@/app/lib/user-access";
+import { ownedId, ownerPattern, requireVisitorOwner } from "@/app/lib/visitor-session";
 
 type GoalInput = {
   id?: string;
@@ -42,12 +42,12 @@ function validate(body: GoalInput) {
 }
 
 export async function GET(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   try {
     const db = await ensureDatabase();
     const [goalResult, edgeResult] = await Promise.all([
-      db.prepare(`${selectGoals} ORDER BY target_date, created_at`).all(),
-      db.prepare(`${selectEdges} ORDER BY created_at`).all(),
+      db.prepare(`${selectGoals} WHERE id LIKE ? ORDER BY target_date, created_at`).bind(ownerPattern(session.owner)).all(),
+      db.prepare(`${selectEdges} WHERE from_goal_id LIKE ? AND to_goal_id LIKE ? ORDER BY created_at`).bind(ownerPattern(session.owner), ownerPattern(session.owner)).all(),
     ]);
     return Response.json({ goals: goalResult.results || [], edges: edgeResult.results || [] });
   } catch (cause) {
@@ -55,52 +55,52 @@ export async function GET(request: Request) {
   }
 }
 
-async function replacePrerequisite(db: D1Database, goalId: string, prerequisiteId: string | null | undefined) {
+async function replacePrerequisite(db: D1Database, owner: string, goalId: string, prerequisiteId: string | null | undefined) {
   if (prerequisiteId === undefined) return;
-  await db.prepare("DELETE FROM life_goal_edges WHERE to_goal_id=? AND relation='depends'").bind(goalId).run();
+  await db.prepare("DELETE FROM life_goal_edges WHERE to_goal_id=? AND to_goal_id LIKE ? AND relation='depends'").bind(goalId, ownerPattern(owner)).run();
   if (!prerequisiteId || prerequisiteId === goalId) return;
-  const exists = await db.prepare("SELECT id FROM life_goals WHERE id=?").bind(prerequisiteId).first();
+  const exists = await db.prepare("SELECT id FROM life_goals WHERE id=? AND id LIKE ?").bind(prerequisiteId, ownerPattern(owner)).first();
   if (!exists) return;
   await db.prepare("INSERT INTO life_goal_edges (id,from_goal_id,to_goal_id,relation,created_at) VALUES (?,?,?,?,?)")
-    .bind(crypto.randomUUID(), prerequisiteId, goalId, "depends", new Date().toISOString()).run();
+    .bind(ownedId(owner), prerequisiteId, goalId, "depends", new Date().toISOString()).run();
 }
 
 export async function POST(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const body = await request.json() as GoalInput;
   const error = validate(body);
   if (error) return Response.json({ error }, { status: 400 });
   const db = await ensureDatabase();
-  const id = crypto.randomUUID();
+  const id = ownedId(session.owner);
   await db.prepare(`INSERT INTO life_goals
     (id,title,description,why,next_step,target_date,start_date,domain,time_mode,node_type,status,progress,track_id,linked_entry_id,location_name,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(id, body.title!.trim(), body.description || "", body.why || "", body.nextStep || "", body.targetDate, body.startDate, body.domain, body.timeMode || "point", body.nodeType, body.status, Number(body.progress || 0), body.trackId || null, body.linkedEntryId || null, body.locationName || "", new Date().toISOString()).run();
-  await replacePrerequisite(db, id, body.prerequisiteId);
+  await replacePrerequisite(db, session.owner, id, body.prerequisiteId);
   return Response.json({ goal: await db.prepare(`${selectGoals} WHERE id=?`).bind(id).first() }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const body = await request.json() as GoalInput;
   if (!body.id) return Response.json({ error: "缺少目标 ID" }, { status: 400 });
   const error = validate(body);
   if (error) return Response.json({ error }, { status: 400 });
   const db = await ensureDatabase();
-  await db.prepare(`UPDATE life_goals SET title=?,description=?,why=?,next_step=?,target_date=?,start_date=?,domain=?,time_mode=?,node_type=?,status=?,progress=?,track_id=?,linked_entry_id=?,location_name=? WHERE id=?`)
-    .bind(body.title!.trim(), body.description || "", body.why || "", body.nextStep || "", body.targetDate, body.startDate, body.domain, body.timeMode || "point", body.nodeType, body.status, Number(body.progress || 0), body.trackId || null, body.linkedEntryId || null, body.locationName || "", body.id).run();
-  await replacePrerequisite(db, body.id, body.prerequisiteId);
-  return Response.json({ goal: await db.prepare(`${selectGoals} WHERE id=?`).bind(body.id).first() });
+  await db.prepare(`UPDATE life_goals SET title=?,description=?,why=?,next_step=?,target_date=?,start_date=?,domain=?,time_mode=?,node_type=?,status=?,progress=?,track_id=?,linked_entry_id=?,location_name=? WHERE id=? AND id LIKE ?`)
+    .bind(body.title!.trim(), body.description || "", body.why || "", body.nextStep || "", body.targetDate, body.startDate, body.domain, body.timeMode || "point", body.nodeType, body.status, Number(body.progress || 0), body.trackId || null, body.linkedEntryId || null, body.locationName || "", body.id, ownerPattern(session.owner)).run();
+  await replacePrerequisite(db, session.owner, body.id, body.prerequisiteId);
+  return Response.json({ goal: await db.prepare(`${selectGoals} WHERE id=? AND id LIKE ?`).bind(body.id, ownerPattern(session.owner)).first() });
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少目标 ID" }, { status: 400 });
   const db = await ensureDatabase();
   await db.batch([
-    db.prepare("DELETE FROM life_goal_edges WHERE from_goal_id=? OR to_goal_id=?").bind(id, id),
-    db.prepare("DELETE FROM life_goals WHERE id=?").bind(id),
+    db.prepare("DELETE FROM life_goal_edges WHERE (from_goal_id=? OR to_goal_id=?) AND from_goal_id LIKE ?").bind(id, id, ownerPattern(session.owner)),
+    db.prepare("DELETE FROM life_goals WHERE id=? AND id LIKE ?").bind(id, ownerPattern(session.owner)),
   ]);
   return Response.json({ ok: true });
 }

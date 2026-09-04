@@ -191,10 +191,11 @@ export default function LifeAtlas() {
     });
     const data = await response.json() as { entry?: LifeEntry; error?: string };
     if (!response.ok) throw new Error(data.error || "保存失败");
+    const savedEntryId = data.entry?.id || entryId;
     let failedUploads = 0;
     for (const item of media) {
       const formData = new FormData();
-      formData.set("entryId", entryId); formData.set("file", item.file); formData.set("stage", item.stage);
+      formData.set("entryId", savedEntryId); formData.set("file", item.file); formData.set("stage", item.stage);
       if (item.capturedAt) formData.set("capturedAt", new Date(item.capturedAt).toISOString());
       if (item.latitude !== undefined) formData.set("latitude", String(item.latitude));
       if (item.longitude !== undefined) formData.set("longitude", String(item.longitude));

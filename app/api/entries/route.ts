@@ -1,6 +1,6 @@
 import { ensureDatabase } from "@/db/bootstrap";
-import { requireUserAccess } from "@/app/lib/user-access";
 import { env } from "cloudflare:workers";
+import { ownedId, ownerPattern, requireVisitorOwner } from "@/app/lib/visitor-session";
 
 type EntryInput = {
   id?: string; title?: string; occurredAt?: string; endedAt?: string | null; locationName?: string;
@@ -40,19 +40,19 @@ function validationError(body: EntryInput) {
 }
 
 export async function GET(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const db = await ensureDatabase();
-  const result = await db.prepare(`${selectSql} ORDER BY occurred_at DESC`).all<Record<string, unknown>>();
+  const result = await db.prepare(`${selectSql} WHERE id LIKE ? ORDER BY occurred_at DESC`).bind(ownerPattern(session.owner)).all<Record<string, unknown>>();
   return Response.json({ entries: (result.results || []).map(normalize) });
 }
 
 export async function POST(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const body = await request.json() as EntryInput;
   const error = validationError(body);
   if (error) return Response.json({ error }, { status: 400 });
   const db = await ensureDatabase();
-  const id = body.id || crypto.randomUUID();
+  const id = ownedId(session.owner, body.id || crypto.randomUUID());
   const selectedEmotions = Array.from(new Set((body.emotions?.length ? body.emotions : [body.emotion || "calm"]).filter(emotion => emotions.has(emotion))));
   const primaryEmotion = selectedEmotions[0] || "calm";
   await db.prepare(`INSERT INTO life_entries (id,title,occurred_at,ended_at,location_name,latitude,longitude,category,status,mood,significance,summary,raw_detail,detail,lessons,people,emotion,emotion_tags,life_phase,visibility,tags,track_id,created_at)
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const body = await request.json() as EntryInput;
   if (!body.id) return Response.json({ error: "缺少记录 ID" }, { status: 400 });
   const error = validationError(body);
@@ -75,21 +75,21 @@ export async function PATCH(request: Request) {
   const db = await ensureDatabase();
   const selectedEmotions = Array.from(new Set((body.emotions?.length ? body.emotions : [body.emotion || "calm"]).filter(emotion => emotions.has(emotion))));
   const primaryEmotion = selectedEmotions[0] || "calm";
-  await db.prepare(`UPDATE life_entries SET title=?, occurred_at=?, ended_at=?, location_name=?, latitude=?, longitude=?, category=?, status=?, mood=?, significance=?, summary=?, raw_detail=?, detail=?, lessons=?, people=?, emotion=?, emotion_tags=?, life_phase=?, visibility=?, tags=?, track_id=? WHERE id=?`).bind(
-    body.title || "未命名经历", body.occurredAt, body.endedAt || null, body.locationName || "未命名地点", Number(body.latitude), Number(body.longitude), body.category || "growth", body.status || "memory", Number(body.mood || 4), Number(body.significance || 3), body.summary || "", body.rawDetail || body.detail || "", body.detail || "", body.lessons || "", body.people || "", primaryEmotion, JSON.stringify(selectedEmotions), body.lifePhase || "", body.visibility || "private", JSON.stringify(body.tags || []), body.trackId || null, body.id,
+  await db.prepare(`UPDATE life_entries SET title=?, occurred_at=?, ended_at=?, location_name=?, latitude=?, longitude=?, category=?, status=?, mood=?, significance=?, summary=?, raw_detail=?, detail=?, lessons=?, people=?, emotion=?, emotion_tags=?, life_phase=?, visibility=?, tags=?, track_id=? WHERE id=? AND id LIKE ?`).bind(
+    body.title || "未命名经历", body.occurredAt, body.endedAt || null, body.locationName || "未命名地点", Number(body.latitude), Number(body.longitude), body.category || "growth", body.status || "memory", Number(body.mood || 4), Number(body.significance || 3), body.summary || "", body.rawDetail || body.detail || "", body.detail || "", body.lessons || "", body.people || "", primaryEmotion, JSON.stringify(selectedEmotions), body.lifePhase || "", body.visibility || "private", JSON.stringify(body.tags || []), body.trackId || null, body.id, ownerPattern(session.owner),
   ).run();
-  const row = await db.prepare(`${selectSql} WHERE id = ?`).bind(body.id).first<Record<string, unknown>>();
+  const row = await db.prepare(`${selectSql} WHERE id = ? AND id LIKE ?`).bind(body.id, ownerPattern(session.owner)).first<Record<string, unknown>>();
   return Response.json({ entry: row ? normalize(row) : null });
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireUserAccess(request); if (denied) return denied;
+  const session = requireVisitorOwner(request); if ("response" in session) return session.response;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少记录 ID" }, { status: 400 });
   const db = await ensureDatabase();
-  const media = await db.prepare("SELECT object_key AS objectKey FROM life_media WHERE entry_id = ?").bind(id).all<{ objectKey: string }>();
+  const media = await db.prepare("SELECT object_key AS objectKey FROM life_media WHERE entry_id = ? AND entry_id LIKE ?").bind(id, ownerPattern(session.owner)).all<{ objectKey: string }>();
   await Promise.all((media.results || []).map(item => env.MEDIA.delete(item.objectKey)));
-  await db.prepare("DELETE FROM life_media WHERE entry_id = ?").bind(id).run();
-  await db.prepare("DELETE FROM life_entries WHERE id = ?").bind(id).run();
+  await db.prepare("DELETE FROM life_media WHERE entry_id = ? AND entry_id LIKE ?").bind(id, ownerPattern(session.owner)).run();
+  await db.prepare("DELETE FROM life_entries WHERE id = ? AND id LIKE ?").bind(id, ownerPattern(session.owner)).run();
   return Response.json({ ok: true });
 }
