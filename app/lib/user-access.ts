@@ -18,3 +18,15 @@ export function userAccessSessionToken() {
 export function hasUserAccessCookie(value?: string) {
   return Boolean(value && value === userAccessSessionToken());
 }
+
+export function hasUserAccessRequest(request: Request) {
+  const hostname = new URL(request.url).hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
+  if (request.headers.get("oai-authenticated-user-id") && request.headers.get("oai-authenticated-user-email")) return true;
+  const cookie = request.headers.get("cookie")?.split(";").map(item => item.trim()).find(item => item.startsWith(`${USER_ACCESS_COOKIE}=`))?.slice(USER_ACCESS_COOKIE.length + 1);
+  return hasUserAccessCookie(cookie);
+}
+
+export function requireUserAccess(request: Request) {
+  return hasUserAccessRequest(request) ? null : Response.json({ error: "请先输入用户端测试码" }, { status: 401 });
+}

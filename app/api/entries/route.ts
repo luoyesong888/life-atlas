@@ -1,4 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
+import { requireUserAccess } from "@/app/lib/user-access";
 import { env } from "cloudflare:workers";
 
 type EntryInput = {
@@ -38,13 +39,15 @@ function validationError(body: EntryInput) {
   return null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const db = await ensureDatabase();
   const result = await db.prepare(`${selectSql} ORDER BY occurred_at DESC`).all<Record<string, unknown>>();
   return Response.json({ entries: (result.results || []).map(normalize) });
 }
 
 export async function POST(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as EntryInput;
   const error = validationError(body);
   if (error) return Response.json({ error }, { status: 400 });
@@ -64,6 +67,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as EntryInput;
   if (!body.id) return Response.json({ error: "缺少记录 ID" }, { status: 400 });
   const error = validationError(body);
@@ -79,6 +83,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少记录 ID" }, { status: 400 });
   const db = await ensureDatabase();

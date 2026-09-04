@@ -1,4 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
+import { requireUserAccess } from "@/app/lib/user-access";
 
 type ProfileInput = {
   displayName?: string;
@@ -24,12 +25,14 @@ function normalize(row: Record<string, unknown> | null) {
   return { ...row, values };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const db = await ensureDatabase();
   return Response.json({ profile: normalize(await db.prepare(selectSql).first<Record<string, unknown>>()) });
 }
 
 export async function PUT(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as ProfileInput;
   const birth = new Date(body.birthDate || "");
   const planningAge = Number(body.planningAge || 80);

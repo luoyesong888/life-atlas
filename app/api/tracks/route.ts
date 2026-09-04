@@ -1,4 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
+import { requireUserAccess } from "@/app/lib/user-access";
 
 type TrackInput = { id?: string; title?: string; description?: string; why?: string; nextStep?: string; startDate?: string; endDate?: string; status?: string; progress?: number; color?: string; sortOrder?: number };
 const selectSql = `SELECT id, title, description, why, next_step AS nextStep, start_date AS startDate, end_date AS endDate, status, progress, color, sort_order AS sortOrder, created_at AS createdAt FROM life_tracks`;
@@ -11,13 +12,15 @@ function validationError(body: TrackInput) {
   return null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const db = await ensureDatabase();
   const result = await db.prepare(`${selectSql} ORDER BY sort_order, created_at`).all();
   return Response.json({ tracks: result.results || [] });
 }
 
 export async function POST(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as TrackInput;
   const error = validationError(body);
   if (error) return Response.json({ error }, { status: 400 });
@@ -30,6 +33,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as TrackInput;
   if (!body.id) return Response.json({ error: "缺少主线 ID" }, { status: 400 });
   const error = validationError(body);
@@ -42,6 +46,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少主线 ID" }, { status: 400 });
   const db = await ensureDatabase();

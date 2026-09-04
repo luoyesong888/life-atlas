@@ -1,4 +1,7 @@
+import { requireUserAccess } from "@/app/lib/user-access";
+
 export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const searchParams = new URL(request.url).searchParams;
   const query = searchParams.get("q")?.trim();
   const latitude = Number(searchParams.get("lat"));

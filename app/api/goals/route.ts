@@ -1,4 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
+import { requireUserAccess } from "@/app/lib/user-access";
 
 type GoalInput = {
   id?: string;
@@ -40,7 +41,8 @@ function validate(body: GoalInput) {
   return null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   try {
     const db = await ensureDatabase();
     const [goalResult, edgeResult] = await Promise.all([
@@ -64,6 +66,7 @@ async function replacePrerequisite(db: D1Database, goalId: string, prerequisiteI
 }
 
 export async function POST(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as GoalInput;
   const error = validate(body);
   if (error) return Response.json({ error }, { status: 400 });
@@ -78,6 +81,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as GoalInput;
   if (!body.id) return Response.json({ error: "缺少目标 ID" }, { status: 400 });
   const error = validate(body);
@@ -90,6 +94,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少目标 ID" }, { status: 400 });
   const db = await ensureDatabase();

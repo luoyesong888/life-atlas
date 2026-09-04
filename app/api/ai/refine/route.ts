@@ -1,4 +1,5 @@
 import { localRefine } from "@/app/lib/local-refine";
+import { requireUserAccess } from "@/app/lib/user-access";
 import { resolveAiProvider } from "@/app/lib/ai-provider-server";
 
 type RefineInput = {
@@ -22,6 +23,7 @@ type OpenAIResponse = {
 };
 
 export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const provider = resolveAiProvider(request);
   const configured = Boolean(provider.apiKey);
   return Response.json({ configured, mode: configured ? provider.provider : "local", provider: provider.provider, model: configured ? provider.model : "local-editor", source: provider.source });
@@ -45,6 +47,7 @@ const schema = {
 } as const;
 
 export async function POST(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const body = await request.json() as RefineInput;
   const rawText = [body.title, body.summary, body.detail, body.polishedDetail, body.lessons].filter(Boolean).join("\n").trim();
   if (rawText.length < 8) {

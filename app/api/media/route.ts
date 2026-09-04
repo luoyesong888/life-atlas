@@ -1,4 +1,5 @@
 import { ensureDatabase } from "@/db/bootstrap";
+import { requireUserAccess } from "@/app/lib/user-access";
 import { env } from "cloudflare:workers";
 
 const maxBytes = 75 * 1024 * 1024;
@@ -10,6 +11,7 @@ function allowedType(contentType: string) {
 }
 
 export async function GET(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const params = new URL(request.url).searchParams;
   const id = params.get("id");
   const entryId = params.get("entryId");
@@ -33,6 +35,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const formData = await request.formData();
   const file = formData.get("file");
   const entryId = String(formData.get("entryId") || "");
@@ -58,6 +61,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = requireUserAccess(request); if (denied) return denied;
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "缺少媒体 ID" }, { status: 400 });
   const db = await ensureDatabase();
