@@ -7,6 +7,7 @@ import {
   NavigationControl,
   setWorkerUrl,
   type GeoJSONSource,
+  type StyleSpecification,
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef } from "react";
@@ -124,6 +125,25 @@ const emotionColor: ExpressionSpecification = [
   "relief", "#86ddb0",
   "#ff9a67",
 ];
+
+const offlineWorldStyle: StyleSpecification = {
+  version: 8,
+  name: "Life Atlas Offline World",
+  sources: {
+    "offline-countries": { type: "geojson", data: "/offline/countries.json", attribution: "Natural Earth (public domain)" },
+    "offline-cities": { type: "geojson", data: "/offline/cities.json" },
+  },
+  layers: [
+    { id: "offline-ocean", type: "background", paint: { "background-color": "#06151b" } },
+    { id: "offline-land", type: "fill", source: "offline-countries", paint: { "fill-color": ["match", ["get", "mapcolor"], 1, "#173b42", 2, "#1b4146", 3, "#15383f", 4, "#20454a", 5, "#193d43", 6, "#23484c", "#183b41"], "fill-opacity": 0.96 } },
+    { id: "offline-country-border", type: "line", source: "offline-countries", paint: { "line-color": "#6d9496", "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.35, 5, 0.9], "line-opacity": 0.58 } },
+    { id: "place_country", type: "symbol", source: "offline-countries", minzoom: 0.7, maxzoom: 5.5, layout: { "text-field": ["coalesce", ["get", "name_zh"], ["get", "name"]], "text-size": ["interpolate", ["linear"], ["zoom"], 1, 8, 4, 13], "text-letter-spacing": 0.06, "text-max-width": 8 }, paint: { "text-color": "#a9bfbd", "text-halo-color": "#07181d", "text-halo-width": 1.2, "text-opacity": 0.82 } },
+    { id: "offline-city-major-dot", type: "circle", source: "offline-cities", filter: ["any", ["==", ["get", "capital"], 1], ["==", ["get", "worldcity"], 1], ["<=", ["get", "rank"], 2]], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 1.6, 6, 3.5], "circle-color": "#f09a70", "circle-stroke-color": "#fff0e5", "circle-stroke-width": 0.7, "circle-opacity": 0.9 } },
+    { id: "place_city_major", type: "symbol", source: "offline-cities", minzoom: 1.8, filter: ["any", ["==", ["get", "capital"], 1], ["==", ["get", "worldcity"], 1], ["<=", ["get", "rank"], 2]], layout: { "text-field": ["coalesce", ["get", "local_name"], ["get", "name"]], "text-size": ["interpolate", ["linear"], ["zoom"], 2, 8, 7, 13], "text-offset": [0, 0.9], "text-anchor": "top", "text-optional": true, "symbol-sort-key": ["get", "rank"] }, paint: { "text-color": "#c6d5d2", "text-halo-color": "#07181d", "text-halo-width": 1.2 } },
+    { id: "offline-city-dot", type: "circle", source: "offline-cities", minzoom: 4, filter: ["all", [">", ["get", "rank"], 2], ["<=", ["get", "rank"], 4]], paint: { "circle-radius": 2, "circle-color": "#8ebfc1", "circle-opacity": 0.82 } },
+    { id: "place_city", type: "symbol", source: "offline-cities", minzoom: 4.5, filter: ["all", [">", ["get", "rank"], 2], ["<=", ["get", "rank"], 4]], layout: { "text-field": ["coalesce", ["get", "local_name"], ["get", "name"]], "text-size": 10, "text-offset": [0, 0.7], "text-anchor": "top", "text-optional": true, "symbol-sort-key": ["get", "rank"] }, paint: { "text-color": "#a9bfbd", "text-halo-color": "#07181d", "text-halo-width": 1 } },
+  ],
+};
 
 function addPlanetLayers(map: Map, entries: LifeEntry[]) {
   if (map.getSource("earth-satellite")) return;
@@ -296,7 +316,7 @@ export default function GlobeMap({ entries, selectedId, draftLocation, focus, la
     if (!containerRef.current || mapRef.current) return;
     const map = new Map({
       container: containerRef.current,
-      style: "https://tiles.openfreemap.org/styles/fiord",
+      style: offlineWorldStyle,
       center: [104, 32],
       zoom: 1.45,
       minZoom: 0.7,
@@ -309,6 +329,14 @@ export default function GlobeMap({ entries, selectedId, draftLocation, focus, la
     mapRef.current = map;
     map.addControl(new NavigationControl({ visualizePitch: true, showCompass: true }), "top-right");
     map.addControl(new AttributionControl({ compact: true }), "bottom-right");
+
+    const detailedStyleUrl = "https://tiles.openfreemap.org/styles/fiord";
+    const detailedStyleController = new AbortController();
+    const detailedStyleTimer = window.setTimeout(() => detailedStyleController.abort(), 2600);
+    fetch(detailedStyleUrl, { signal: detailedStyleController.signal })
+      .then(response => { if (response.ok && mapRef.current === map) map.setStyle(detailedStyleUrl); })
+      .catch(() => {})
+      .finally(() => window.clearTimeout(detailedStyleTimer));
 
     map.on("style.load", () => {
       map.setProjection({ type: "globe" });
@@ -344,7 +372,7 @@ export default function GlobeMap({ entries, selectedId, draftLocation, focus, la
     map.on("load", reportViewport);
     map.on("moveend", reportViewport);
 
-    return () => { map.remove(); mapRef.current = null; };
+    return () => { detailedStyleController.abort(); window.clearTimeout(detailedStyleTimer); map.remove(); mapRef.current = null; };
   }, []);
 
   useEffect(() => {
