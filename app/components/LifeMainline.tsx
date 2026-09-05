@@ -3,16 +3,17 @@
 
 import {
   CalendarRange, ChevronDown, ChevronLeft, ChevronRight, CircleUserRound, Film, Images,
-  Link2, LoaderCircle, MapPin, Plus, Quote, Target, Trash2, Volume2, X,
+  Link2, LoaderCircle, MapPin, Pencil, Plus, Quote, Target, Trash2, Volume2, X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { LifeEntry, LifeGoal, LifeGoalEdge, LifeMedia, LifeProfile, LifeTrack } from "../lib/types";
+import type { LifeDomain, LifeEntry, LifeGoal, LifeGoalEdge, LifeMedia, LifeProfile, LifeTrack } from "../lib/types";
 
 type Props = { entries: LifeEntry[]; onClose: () => void; onEntrySelect: (id: string) => void };
 type DomainKey = LifeGoal["domain"];
 type ScaleMode = "year" | "three" | "ten" | "life";
 type DomainFilter = "all" | DomainKey;
+type DomainOption = { key: DomainKey; label: string; omen: string; color: string; custom?: boolean };
 type TimelineItem = {
   id: string;
   kind: "goal" | "entry";
@@ -33,7 +34,7 @@ type TimelineGroup = {
   items: TimelineItem[];
 };
 
-const domains: Array<{ key: DomainKey; label: string; omen: string; color: string }> = [
+const domains: DomainOption[] = [
   { key: "career", label: "事业", omen: "作品与职业", color: "#79c8ff" },
   { key: "relationship", label: "关系", omen: "重要的人", color: "#c29aff" },
   { key: "health", label: "身心", omen: "身体与恢复", color: "#82dfb3" },
@@ -72,6 +73,7 @@ function entryEmotion(entry: LifeEntry) {
 export default function LifeMainline({ entries, onClose, onEntrySelect }: Props) {
   const [profile, setProfile] = useState<LifeProfile | null>(null);
   const [tracks, setTracks] = useState<LifeTrack[]>([]);
+  const [customDomains, setCustomDomains] = useState<LifeDomain[]>([]);
   const [goals, setGoals] = useState<LifeGoal[]>([]);
   const [edges, setEdges] = useState<LifeGoalEdge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +83,8 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
   const [profileOpen, setProfileOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [trackOpen, setTrackOpen] = useState(false);
+  const [domainOpen, setDomainOpen] = useState(false);
+  const [editingDomain, setEditingDomain] = useState<LifeDomain | null>(null);
   const [editingGoal, setEditingGoal] = useState<LifeGoal | null>(null);
   const [editingTrack, setEditingTrack] = useState<LifeTrack | null>(null);
   const [draftDomain, setDraftDomain] = useState<DomainKey>("career");
@@ -90,12 +94,13 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
   const nowMarkerRef = useRef<HTMLDivElement>(null);
 
   const refresh = async () => {
-    const [profileResponse, trackResponse, goalResponse] = await Promise.all([fetch("/api/life-profile"), fetch("/api/tracks"), fetch("/api/goals")]);
-    if (!profileResponse.ok || !trackResponse.ok || !goalResponse.ok) throw new Error("无法读取人生时间轴");
+    const [profileResponse, trackResponse, goalResponse, domainResponse] = await Promise.all([fetch("/api/life-profile"), fetch("/api/tracks"), fetch("/api/goals"), fetch("/api/domains")]);
+    if (!profileResponse.ok || !trackResponse.ok || !goalResponse.ok || !domainResponse.ok) throw new Error("无法读取人生时间轴");
     const profileData = await profileResponse.json() as { profile: LifeProfile | null };
     const trackData = await trackResponse.json() as { tracks: LifeTrack[] };
     const goalData = await goalResponse.json() as { goals: LifeGoal[]; edges: LifeGoalEdge[] };
-    setProfile(profileData.profile); setTracks(trackData.tracks || []); setGoals(goalData.goals || []); setEdges(goalData.edges || []);
+    const domainData = await domainResponse.json() as { domains: LifeDomain[] };
+    setProfile(profileData.profile); setTracks(trackData.tracks || []); setGoals(goalData.goals || []); setEdges(goalData.edges || []); setCustomDomains(domainData.domains || []);
   };
 
   useEffect(() => {
@@ -110,11 +115,12 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
         if (active) setError("个人档案暂时无法读取");
       }
       try {
-        const [trackResponse, goalResponse] = await Promise.all([fetch("/api/tracks"), fetch("/api/goals")]);
-        if (!trackResponse.ok || !goalResponse.ok) throw new Error("timeline failed");
+        const [trackResponse, goalResponse, domainResponse] = await Promise.all([fetch("/api/tracks"), fetch("/api/goals"), fetch("/api/domains")]);
+        if (!trackResponse.ok || !goalResponse.ok || !domainResponse.ok) throw new Error("timeline failed");
         const trackData = await trackResponse.json() as { tracks: LifeTrack[] };
         const goalData = await goalResponse.json() as { goals: LifeGoal[]; edges: LifeGoalEdge[] };
-        if (active) { setTracks(trackData.tracks || []); setGoals(goalData.goals || []); setEdges(goalData.edges || []); }
+        const domainData = await domainResponse.json() as { domains: LifeDomain[] };
+        if (active) { setTracks(trackData.tracks || []); setGoals(goalData.goals || []); setEdges(goalData.edges || []); setCustomDomains(domainData.domains || []); }
       } catch {
         if (active) setError("人生时间轴暂时无法读取");
       } finally {
@@ -143,6 +149,7 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
   const birth = useMemo(() => profile?.birthDate ? new Date(profile.birthDate) : fallbackBirthDate(), [profile]);
   const currentMonths = Math.max(0, monthsBetween(birth, new Date()));
   const currentAge = `${Math.floor(currentMonths / 12)}岁${currentMonths % 12}个月`;
+  const domainOptions = useMemo<DomainOption[]>(() => [...domains, ...customDomains.map(domain => ({ key: domain.id, label: domain.label, omen: domain.description || "自定义领域", color: domain.color, custom: true }))], [customDomains]);
   const memorySequence = useMemo(() => [...entries].sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime()), [entries]);
   const featuredMemory = useMemo(() => {
     const now = new Date();
@@ -236,6 +243,23 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
     await refresh(); setTrackOpen(false); setEditingTrack(null);
   };
 
+  const saveDomain = async (payload: Pick<LifeDomain, "label" | "description" | "color"> & { id?: string }) => {
+    const response = await fetch("/api/domains", { method: payload.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await response.json() as { domain?: LifeDomain; error?: string };
+    if (!response.ok || !data.domain) throw new Error(data.error || "保存领域失败");
+    setCustomDomains(current => payload.id ? current.map(domain => domain.id === data.domain!.id ? data.domain! : domain) : [...current, data.domain!]);
+    setDomainOpen(false); setEditingDomain(null);
+  };
+
+  const deleteDomain = async (domain: LifeDomain) => {
+    const response = await fetch(`/api/domains?id=${encodeURIComponent(domain.id)}`, { method: "DELETE" });
+    const data = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(data.error || "删除领域失败");
+    setCustomDomains(current => current.filter(item => item.id !== domain.id));
+    if (activeDomain === domain.id) setActiveDomain("all");
+    setDomainOpen(false); setEditingDomain(null);
+  };
+
   const openGoalForDomain = (domain: DomainKey, targetDate = isoDate(addMonths(new Date(), 6))) => {
     setDraftDomain(domain);
     setDraftTargetDate(targetDate);
@@ -254,7 +278,7 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
   const selectedMemoryIndex = selectedMemory ? memorySequence.findIndex(entry => entry.id === selectedMemory.id) : -1;
 
   const renderItem = (item: TimelineItem) => {
-    const domain = domains.find(value => value.key === item.domain) || domains[0];
+    const domain = domainOptions.find(value => value.key === item.domain) || domains[0];
     const date = new Date(item.date);
     if (item.kind === "goal" && item.goal) {
       const goal = item.goal;
@@ -304,7 +328,11 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
       <div className="timeline-planner">
         <div className="timeline-planner-toolbar">
           <div className="planner-toolbar-row"><div className="timeline-scale" aria-label="时间范围">{scaleLabels.map(item => <button className={scaleMode === item.key ? "active" : ""} onClick={() => setScaleMode(item.key)} key={item.key}>{item.label}</button>)}</div><button className="planner-today" onClick={focusNow}>回到今天</button></div>
-          <div className="domain-filter" aria-label="生活领域筛选"><button className={activeDomain === "all" ? "active" : ""} onClick={() => setActiveDomain("all")}>全部</button>{domains.map(domain => <button className={activeDomain === domain.key ? "active" : ""} style={{ "--domain-color": domain.color } as CSSProperties} onClick={() => setActiveDomain(domain.key)} key={domain.key}><i />{domain.label}</button>)}</div>
+          <div className="domain-filter" aria-label="生活领域筛选">
+            <button className={activeDomain === "all" ? "active" : ""} onClick={() => setActiveDomain("all")}>全部</button>
+            {domainOptions.map(domain => domain.custom ? <span className="domain-filter-custom" key={domain.key}><button className={activeDomain === domain.key ? "active" : ""} style={{ "--domain-color": domain.color } as CSSProperties} onClick={() => setActiveDomain(domain.key)}><i />{domain.label}</button><button className="domain-edit-button" onClick={() => { const source = customDomains.find(item => item.id === domain.key) || null; setEditingDomain(source); setDomainOpen(true); }} aria-label={`编辑领域 ${domain.label}`}><Pencil size={12} /></button></span> : <button className={activeDomain === domain.key ? "active" : ""} style={{ "--domain-color": domain.color } as CSSProperties} onClick={() => setActiveDomain(domain.key)} key={domain.key}><i />{domain.label}</button>)}
+            <button className="domain-add-button" onClick={() => { setEditingDomain(null); setDomainOpen(true); }}><Plus size={13} />自定义</button>
+          </div>
         </div>
 
         <div className="vertical-timeline">
@@ -342,8 +370,9 @@ export default function LifeMainline({ entries, onClose, onEntrySelect }: Props)
 
       {error && <div className="mainline-error">{error}</div>}
       {profileOpen && <ProfileEditor initial={profile} onClose={() => setProfileOpen(false)} onSave={saveProfile} />}
-      {goalOpen && <GoalEditor initial={editingGoal} profile={profile} goals={goals} edges={edges} tracks={tracks} entries={entries} defaultDomain={draftDomain} defaultTargetDate={draftTargetDate} onClose={() => { setGoalOpen(false); setEditingGoal(null); }} onSave={saveGoal} onDelete={editingGoal ? () => deleteGoal(editingGoal) : undefined} />}
+      {goalOpen && <GoalEditor initial={editingGoal} profile={profile} goals={goals} edges={edges} tracks={tracks} entries={entries} domainOptions={domainOptions} defaultDomain={draftDomain} defaultTargetDate={draftTargetDate} onClose={() => { setGoalOpen(false); setEditingGoal(null); }} onSave={saveGoal} onDelete={editingGoal ? () => deleteGoal(editingGoal) : undefined} />}
       {trackOpen && <MainlineEditor initial={editingTrack} onClose={() => { setTrackOpen(false); setEditingTrack(null); }} onSave={saveTrack} />}
+      {domainOpen && <DomainEditor initial={editingDomain} onClose={() => { setDomainOpen(false); setEditingDomain(null); }} onSave={saveDomain} onDelete={editingDomain ? () => deleteDomain(editingDomain) : undefined} />}
       {selectedMemory && <MemoryReplay entry={selectedMemory} media={mediaByEntry[selectedMemory.id] || []} hasPrevious={selectedMemoryIndex > 0} hasNext={selectedMemoryIndex >= 0 && selectedMemoryIndex < memorySequence.length - 1} onPrevious={() => setSelectedMemory(memorySequence[selectedMemoryIndex - 1])} onNext={() => setSelectedMemory(memorySequence[selectedMemoryIndex + 1])} onClose={() => setSelectedMemory(null)} onOpenMap={() => onEntrySelect(selectedMemory.id)} />}
     </section>
   );
@@ -380,13 +409,41 @@ function MemoryReplay({ entry, media, hasPrevious, hasNext, onPrevious, onNext, 
   </section>;
 }
 
+function DomainEditor({ initial, onClose, onSave, onDelete }: { initial: LifeDomain | null; onClose: () => void; onSave: (payload: Pick<LifeDomain, "label" | "description" | "color"> & { id?: string }) => Promise<void>; onDelete?: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [color, setColor] = useState(initial?.color || "#70cfcf");
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setError("");
+    const data = new FormData(event.currentTarget);
+    try { await onSave({ id: initial?.id, label: String(data.get("label")), description: String(data.get("description")), color }); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "保存领域失败"); setBusy(false); }
+  };
+  const remove = async () => {
+    if (!onDelete || !window.confirm(`确定删除领域“${initial?.label}”吗？`)) return;
+    setBusy(true); setError("");
+    try { await onDelete(); } catch (cause) { setError(cause instanceof Error ? cause.message : "删除领域失败"); setBusy(false); }
+  };
+  return <div className="mainline-modal-backdrop"><form className="mainline-editor domain-editor" onSubmit={submit}>
+    <header><div><small>{initial ? "EDIT DOMAIN" : "CUSTOM DOMAIN"}</small><h2>{initial ? "编辑自定义领域" : "添加自定义领域"}</h2></div><button type="button" onClick={onClose} aria-label="关闭领域编辑器"><X /></button></header>
+    <div className="domain-editor-preview" style={{ "--domain-preview": color } as CSSProperties}><i /><span><strong>{initial?.label || "我的领域"}</strong><small>保存后会同步到筛选和目标表单</small></span></div>
+    <div className="mainline-form">
+      <label className="wide"><span>领域名称 *</span><input name="label" required maxLength={12} defaultValue={initial?.label} placeholder="例如：学习、家庭、精神世界" /></label>
+      <label className="wide"><span>一句说明</span><input name="description" maxLength={30} defaultValue={initial?.description} placeholder="这个领域对你意味着什么" /></label>
+      <label className="wide domain-color-field"><span>识别颜色</span><div><input name="color" type="color" value={color} onChange={event => setColor(event.target.value)} /><strong>{color.toUpperCase()}</strong></div></label>
+    </div>
+    {error && <div className="mainline-form-error">{error}</div>}
+    <footer>{onDelete && <button className="delete-mainline" type="button" onClick={() => void remove()} disabled={busy}><Trash2 size={14} />删除领域</button>}<span /><button type="button" onClick={onClose}>取消</button><button className="save-mainline" disabled={busy}>{busy && <LoaderCircle className="spin" size={15} />}{initial ? "保存修改" : "添加领域"}</button></footer>
+  </form></div>;
+}
+
 function ProfileEditor({ initial, onClose, onSave }: { initial: LifeProfile | null; onClose: () => void; onSave: (payload: Partial<LifeProfile>) => Promise<void> }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setError(""); const data = new FormData(event.currentTarget); try { await onSave({ displayName: String(data.get("displayName")), birthDate: String(data.get("birthDate")), birthCity: String(data.get("birthCity")), currentCity: String(data.get("currentCity")), identity: String(data.get("identity")), planningAge: Number(data.get("planningAge")), values: String(data.get("values")).split(/[,，、]/).map(item => item.trim()).filter(Boolean), avatarSymbol: String(data.get("avatarSymbol")) }); } catch (cause) { setError(cause instanceof Error ? cause.message : "保存失败"); setBusy(false); } };
   return <div className="mainline-modal-backdrop"><form className="mainline-editor profile-editor" onSubmit={submit}><header><div><small>PROFILE</small><h2>编辑个人档案</h2></div><button type="button" onClick={onClose} aria-label="关闭个人档案"><X /></button></header><div className="profile-form-orb"><span>{initial?.avatarSymbol || "我"}</span><p>出生日期只用于计算年龄刻度，不会公开展示。</p></div><div className="mainline-form"><label><span>姓名或昵称 *</span><input name="displayName" required defaultValue={initial?.displayName} placeholder="你想如何称呼自己" /></label><label><span>头像文字</span><input name="avatarSymbol" maxLength={2} defaultValue={initial?.avatarSymbol || "我"} /></label><label><span>出生日期 *</span><input name="birthDate" type="date" required defaultValue={initial?.birthDate || isoDate(fallbackBirthDate())} /></label><label><span>规划到多少岁</span><input name="planningAge" type="number" min="1" max="120" defaultValue={initial?.planningAge || 80} /></label><label><span>出生城市</span><input name="birthCity" defaultValue={initial?.birthCity} /></label><label><span>当前城市</span><input name="currentCity" defaultValue={initial?.currentCity} /></label><label className="wide"><span>当前身份</span><input name="identity" defaultValue={initial?.identity} placeholder="例：刚毕业的创作者、正在创业的设计师" /></label><label className="wide"><span>五项人生价值</span><input name="values" defaultValue={initial?.values.join("，")} placeholder="自由，创造，真诚，健康，连接" /></label></div>{error && <div className="mainline-form-error">{error}</div>}<footer><span /><button type="button" onClick={onClose}>取消</button><button className="save-mainline" disabled={busy}>{busy && <LoaderCircle className="spin" size={15} />}保存档案</button></footer></form></div>;
 }
 
-function GoalEditor({ initial, profile, goals, edges, tracks, entries, defaultDomain, defaultTargetDate, onClose, onSave, onDelete }: { initial: LifeGoal | null; profile: LifeProfile | null; goals: LifeGoal[]; edges: LifeGoalEdge[]; tracks: LifeTrack[]; entries: LifeEntry[]; defaultDomain: DomainKey; defaultTargetDate: string; onClose: () => void; onSave: (payload: Partial<LifeGoal> & { prerequisiteId?: string | null }) => Promise<void>; onDelete?: () => Promise<void> }) {
+function GoalEditor({ initial, profile, goals, edges, tracks, entries, domainOptions, defaultDomain, defaultTargetDate, onClose, onSave, onDelete }: { initial: LifeGoal | null; profile: LifeProfile | null; goals: LifeGoal[]; edges: LifeGoalEdge[]; tracks: LifeTrack[]; entries: LifeEntry[]; domainOptions: DomainOption[]; defaultDomain: DomainKey; defaultTargetDate: string; onClose: () => void; onSave: (payload: Partial<LifeGoal> & { prerequisiteId?: string | null }) => Promise<void>; onDelete?: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const birth = profile?.birthDate ? new Date(profile.birthDate) : fallbackBirthDate();
@@ -434,7 +491,7 @@ function GoalEditor({ initial, profile, goals, edges, tracks, entries, defaultDo
     <div className="mainline-form">
       <label className="wide goal-title-field"><span>目标名称 *</span><input name="title" required defaultValue={initial?.title} placeholder="例如：完成并发布第一款独立产品" /></label>
       <div className="wide goal-primary-row">
-        <label><span>生活领域</span><select name="domain" defaultValue={initial?.domain || defaultDomain}>{domains.map(domain => <option value={domain.key} key={domain.key}>{domain.label}</option>)}</select></label>
+        <label><span>生活领域</span><select name="domain" defaultValue={initial?.domain || defaultDomain}>{domainOptions.map(domain => <option value={domain.key} key={domain.key}>{domain.label}</option>)}</select></label>
         <label><span>计划完成时间</span><input type="date" required value={targetDate} onChange={event => setTargetDate(event.target.value)} /></label>
       </div>
       <div className="wide goal-date-summary"><CalendarRange size={15} /><span><strong>{displayDate(computedTargetDate)}</strong><small>届时约 {targetParts.years} 岁 {targetParts.months} 个月 · 当前 {currentParts.years} 岁 {currentParts.months} 个月</small></span></div>

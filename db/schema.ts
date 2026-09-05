@@ -1,9 +1,23 @@
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const appMeta = sqliteTable("app_meta", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+export const lifeDomains = sqliteTable("life_domains", {
+  id: text("id").primaryKey(),
+  ownerKey: text("owner_key").notNull(),
+  label: text("label").notNull(),
+  description: text("description").notNull().default(""),
+  color: text("color").notNull().default("#70cfcf"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, table => [
+  index("idx_domains_owner_order").on(table.ownerKey, table.sortOrder),
+  uniqueIndex("idx_domains_owner_label").on(table.ownerKey, table.label),
+]);
 
 export const lifeTracks = sqliteTable("life_tracks", {
   id: text("id").primaryKey(),

@@ -5,6 +5,7 @@ const baseUrl = process.env.LIFE_ATLAS_URL || "http://localhost:3000";
 const jsonHeaders = { "Content-Type": "application/json" };
 let trackId;
 let mediaId;
+let customDomainId;
 const goalIds = [];
 const entryId = "qa-api-live-entry";
 
@@ -18,6 +19,7 @@ after(async () => {
   for (const id of goalIds) await fetch(`${baseUrl}/api/goals?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
   await fetch(`${baseUrl}/api/entries?id=${entryId}`, { method: "DELETE" }).catch(() => {});
   if (trackId) await fetch(`${baseUrl}/api/tracks?id=${encodeURIComponent(trackId)}`, { method: "DELETE" }).catch(() => {});
+  if (customDomainId) await fetch(`${baseUrl}/api/domains?id=${encodeURIComponent(customDomainId)}`, { method: "DELETE" }).catch(() => {});
 });
 
 test("home and collection APIs respond", async () => {
@@ -64,6 +66,17 @@ test("entry and track validation rejects invalid input", async () => {
   assert.equal(badTrack.response.status, 400);
   assert.equal(badGoal.response.status, 400);
   assert.equal(badProfile.response.status, 400);
+});
+
+test("custom life domains can be created, edited and listed", async () => {
+  const created = await request("/api/domains", { method: "POST", headers: jsonHeaders, body: JSON.stringify({ label: "QA 学习", description: "测试自定义领域", color: "#52b9c2" }) });
+  assert.equal(created.response.status, 201); customDomainId = created.body.domain.id;
+  const updated = await request("/api/domains", { method: "PATCH", headers: jsonHeaders, body: JSON.stringify({ id: customDomainId, label: "QA 学习成长", description: "已更新", color: "#ef8d5b" }) });
+  assert.equal(updated.response.status, 200);
+  const collection = await request("/api/domains");
+  assert.equal(collection.body.domains.some(item => item.id === customDomainId && item.label === "QA 学习成长"), true);
+  const removed = await request(`/api/domains?id=${encodeURIComponent(customDomainId)}`, { method: "DELETE" });
+  assert.equal(removed.response.status, 200); customDomainId = null;
 });
 
 test("track create and update persists", async () => {

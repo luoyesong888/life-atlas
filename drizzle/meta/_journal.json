@@ -57,6 +57,13 @@
       "when": 1788253810299,
       "tag": "0007_abandoned_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788617578161,
+      "tag": "0008_calm_moonstone",
+      "breakpoints": true
     }
   ]
 }

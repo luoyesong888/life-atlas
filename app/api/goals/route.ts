@@ -20,7 +20,7 @@ type GoalInput = {
   prerequisiteId?: string | null;
 };
 
-const domains = new Set(["career", "relationship", "health", "creation", "wealth", "exploration"]);
+const builtInDomains = new Set(["career", "relationship", "health", "creation", "wealth", "exploration"]);
 const nodeTypes = new Set(["goal", "milestone", "turning", "habit"]);
 const timeModes = new Set(["point", "range"]);
 const statuses = new Set(["planned", "active", "complete", "paused"]);
@@ -32,13 +32,18 @@ const selectEdges = `SELECT id,from_goal_id AS fromGoalId,to_goal_id AS toGoalId
 function validate(body: GoalInput) {
   if (!body.title?.trim() || !body.targetDate || !body.startDate) return "请填写目标名称和时间";
   if (!Number.isFinite(new Date(body.targetDate).getTime()) || !Number.isFinite(new Date(body.startDate).getTime()) || body.startDate > body.targetDate) return "目标时间范围无效";
-  if (!domains.has(body.domain || "")) return "人生领域无效";
+  if (!body.domain || !/^[a-zA-Z0-9._-]{2,80}$/.test(body.domain)) return "人生领域无效";
   if (body.timeMode !== undefined && !timeModes.has(body.timeMode)) return "年龄目标形式无效";
   if (!nodeTypes.has(body.nodeType || "")) return "节点类型无效";
   if (!statuses.has(body.status || "")) return "目标状态无效";
   const progress = Number(body.progress || 0);
   if (!Number.isFinite(progress) || progress < 0 || progress > 100) return "进度必须在 0—100 之间";
   return null;
+}
+
+async function domainAllowed(db: D1Database, owner: string, domain: string) {
+  if (builtInDomains.has(domain)) return true;
+  return Boolean(await db.prepare("SELECT id FROM life_domains WHERE id=? AND owner_key=?").bind(domain, owner).first());
 }
 
 export async function GET(request: Request) {
@@ -71,6 +76,7 @@ export async function POST(request: Request) {
   const error = validate(body);
   if (error) return Response.json({ error }, { status: 400 });
   const db = await ensureDatabase();
+  if (!await domainAllowed(db, session.owner, body.domain!)) return Response.json({ error: "自定义领域不存在" }, { status: 400 });
   const id = ownedId(session.owner);
   await db.prepare(`INSERT INTO life_goals
     (id,title,description,why,next_step,target_date,start_date,domain,time_mode,node_type,status,progress,track_id,linked_entry_id,location_name,created_at)
@@ -87,6 +93,7 @@ export async function PATCH(request: Request) {
   const error = validate(body);
   if (error) return Response.json({ error }, { status: 400 });
   const db = await ensureDatabase();
+  if (!await domainAllowed(db, session.owner, body.domain!)) return Response.json({ error: "自定义领域不存在" }, { status: 400 });
   await db.prepare(`UPDATE life_goals SET title=?,description=?,why=?,next_step=?,target_date=?,start_date=?,domain=?,time_mode=?,node_type=?,status=?,progress=?,track_id=?,linked_entry_id=?,location_name=? WHERE id=? AND id LIKE ?`)
     .bind(body.title!.trim(), body.description || "", body.why || "", body.nextStep || "", body.targetDate, body.startDate, body.domain, body.timeMode || "point", body.nodeType, body.status, Number(body.progress || 0), body.trackId || null, body.linkedEntryId || null, body.locationName || "", body.id, ownerPattern(session.owner)).run();
   await replacePrerequisite(db, session.owner, body.id, body.prerequisiteId);

@@ -75,7 +75,7 @@ export type LifeGoal = {
   nextStep: string;
   targetDate: string;
   startDate: string;
-  domain: "career" | "relationship" | "health" | "creation" | "wealth" | "exploration";
+  domain: string;
   timeMode: "point" | "range";
   nodeType: "goal" | "milestone" | "turning" | "habit";
   status: "planned" | "active" | "complete" | "paused";
@@ -84,6 +84,16 @@ export type LifeGoal = {
   linkedEntryId: string | null;
   locationName: string;
   createdAt: string;
+};
+
+export type LifeDomain = {
+  id: string;
+  label: string;
+  description: string;
+  color: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type LifeGoalEdge = {

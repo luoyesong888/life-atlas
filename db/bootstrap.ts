@@ -23,7 +23,7 @@ async function initializeDatabase(db: D1Database) {
     value TEXT NOT NULL
   )`).run();
   const schemaVersion = await db.prepare("SELECT value FROM app_meta WHERE key='schema_version'").first<{ value: string }>();
-  if (schemaVersion?.value === "7") {
+  if (schemaVersion?.value === "8") {
     ready = true;
     return;
   }
@@ -45,6 +45,16 @@ async function initializeDatabase(db: D1Database) {
       color TEXT NOT NULL DEFAULT '#ff9c69',
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS life_domains (
+      id TEXT PRIMARY KEY,
+      owner_key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '#70cfcf',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     )`),
     db.prepare(`CREATE TABLE IF NOT EXISTS life_entries (
       id TEXT PRIMARY KEY,
@@ -139,6 +149,8 @@ async function initializeDatabase(db: D1Database) {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_goals_track_id ON life_goals(track_id)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_goal_edges_from ON life_goal_edges(from_goal_id)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_goal_edges_to ON life_goal_edges(to_goal_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_domains_owner_order ON life_domains(owner_key,sort_order)"),
+    db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_domains_owner_label ON life_domains(owner_key,label)"),
   ]);
 
   const entryColumns = await db.prepare("PRAGMA table_info(life_entries)").all<{ name: string }>();
@@ -212,7 +224,7 @@ async function initializeDatabase(db: D1Database) {
     ]);
   }
 
-  await db.prepare("INSERT INTO app_meta (key,value) VALUES ('schema_version','7') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
+  await db.prepare("INSERT INTO app_meta (key,value) VALUES ('schema_version','8') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run();
   await db.prepare("PRAGMA optimize").run();
   ready = true;
 }

@@ -59,6 +59,8 @@ beforeEach(() => {
     if (url === "/api/life-profile" && method === "PUT") return reply({ profile: { ...profile, ...body } });
     if (url === "/api/goals" && method === "GET") return reply({ goals: [goal], edges: [] });
     if (url === "/api/goals" && (method === "POST" || method === "PATCH")) return reply({ goal: { ...goal, ...body, id: body?.id || "goal-new" } }, method === "POST" ? 201 : 200);
+    if (url === "/api/domains" && method === "GET") return reply({ domains: [] });
+    if (url === "/api/domains" && (method === "POST" || method === "PATCH")) return reply({ domain: { id: body?.id || "custom-learning", label: body?.label, description: body?.description, color: body?.color, sortOrder: 1, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z" } }, method === "POST" ? 201 : 200);
     if (url.startsWith("/api/geocode?lat=")) return reply({ results: [{ name: "中国 · 浙江省 · 杭州市 · 西湖区", lat: 30.2741, lng: 120.1551 }] });
     if (url.startsWith("/api/geocode?q=")) return reply({ results: [{ name: "中国 · 浙江省 · 杭州市", lat: 30.2741, lng: 120.1551 }] });
     if (url === "/api/ai/refine" && method === "GET") return reply({ configured: requestProvider === "deepseek" || aiConfigured, mode: requestProvider === "deepseek" ? "deepseek" : aiConfigured ? "openai" : "local", model: requestProvider === "deepseek" ? "deepseek-v4-flash" : aiConfigured ? "gpt-5.4-mini" : "local-editor" });
@@ -200,6 +202,17 @@ describe("globe map experience workflows", () => {
     expect(screen.getByText("当时发生了什么")).toBeTruthy(); expect(screen.getByText("听见当时的声音")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "关闭记忆回放" }));
     expect(screen.queryByLabelText(`记忆回放：${entry.title}`)).toBeNull();
+  });
+
+  it("可添加自定义领域并同步到筛选和目标表单", async () => {
+    const user = userEvent.setup(); await renderReady(); await user.click(screen.getByRole("button", { name: "人生时间轴" }));
+    await user.click(screen.getByRole("button", { name: /自定义/ }));
+    await user.type(screen.getByPlaceholderText(/学习、家庭/), "学习"); await user.type(screen.getByPlaceholderText(/领域对你意味着什么/), "持续输入与成长");
+    await user.click(screen.getByRole("button", { name: "添加领域" }));
+    expect(await screen.findByRole("button", { name: "学习" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "新建目标" }));
+    expect(screen.getByRole("option", { name: "学习" })).toBeTruthy();
+    expect(calls.some(call => call.url === "/api/domains" && call.method === "POST" && call.body?.label === "学习")).toBe(true);
   });
 
   it("可在中文和英文地图标签之间切换", async () => {
