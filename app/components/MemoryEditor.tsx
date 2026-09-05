@@ -3,7 +3,7 @@
 
 import {
   Camera, Check, ChevronDown, Clock3, Edit3, FileAudio, Globe2, ImagePlus, LoaderCircle,
-  Lock, MapPin, Mic, Paperclip, Plus, RotateCcw, Save, Sparkles, Trash2, Users, Video, X,
+  Lock, MapPin, Mic, Paperclip, Pencil, Plus, RotateCcw, Save, Sparkles, Trash2, Users, Video, X,
 } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { LifeEntry, LifeMedia, LifeTrack } from "../lib/types";
@@ -78,6 +78,8 @@ export default function MemoryEditor({ initial, coordinates, placeName, onClose,
   const [chapterError, setChapterError] = useState("");
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [suggestionOriginal, setSuggestionOriginal] = useState<SuggestionOriginal | null>(null);
+  const [suggestionPeopleText, setSuggestionPeopleText] = useState("");
+  const [suggestionTagsText, setSuggestionTagsText] = useState("");
   const [suggestionTone, setSuggestionTone] = useState("");
   const [aiMode, setAiMode] = useState<"openai" | "deepseek" | "local" | null>(null);
   const [tone, setTone] = useState("honest");
@@ -232,7 +234,7 @@ export default function MemoryEditor({ initial, coordinates, placeName, onClose,
       const data = await response.json() as { refined?: Suggestion; error?: string; mode?: "openai" | "deepseek" | "local" };
       if (!response.ok || !data.refined) throw new Error(data.error || "整理失败");
       setSuggestionOriginal({ title, summary, detail: rawDetail, lessons });
-      setSuggestion(data.refined); setSuggestionTone(tone); setAiMode(data.mode || aiMode || "local");
+      setSuggestion(data.refined); setSuggestionPeopleText(data.refined.people.join("，")); setSuggestionTagsText(data.refined.tags.join("，")); setSuggestionTone(tone); setAiMode(data.mode || aiMode || "local");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "整理失败"); }
     finally { setAiBusy(false); }
   };
@@ -302,12 +304,17 @@ export default function MemoryEditor({ initial, coordinates, placeName, onClose,
             <section className="ai-inline">
               <div className="ai-inline-head"><div><small>03 · ORGANIZE</small><h3><Sparkles size={16} />{aiMode === "deepseek" ? "DeepSeek 帮我整理" : aiMode === "openai" ? "OpenAI 帮我整理" : "本地智能整理"}</h3><p>只整理你提供的事实，不新增人物和情节。</p></div><select aria-label="整理风格" value={tone} onChange={event => setTone(event.target.value)}>{styles.map(item => <option value={item[0]} key={item[0]}>{item[1]}</option>)}</select><button type="button" onClick={refine} disabled={aiBusy}>{aiBusy ? <LoaderCircle className="spin" /> : <Sparkles />} {suggestion ? "重新生成" : "帮我整理"}</button></div>
               {tone === "storymaster" && <div className="storymaster-note"><strong>Storytelling Mastery</strong><span>保留事实和个人语气，润色句子、段落、转折与收尾；不会补写场景或情节。</span></div>}
-              {suggestion && <div className="suggestions"><div className="suggestion-toolbar"><span>{suggestionTone !== tone ? "模板已更改，点击重新生成后更新结果" : "已生成 7 项建议"}</span><button type="button" onClick={acceptAll}><Check size={14} />全部接受</button></div>
-                <SuggestionCard label="标题" original={suggestionOriginal?.title || "未填写"} suggestion={suggestion.title} onAccept={() => setTitle(suggestion.title)} onKeep={() => setTitle(suggestionOriginal?.title || "")} />
-                <SuggestionCard label="一句话概括" original={suggestionOriginal?.summary || "未填写"} suggestion={suggestion.summary} onAccept={() => setSummary(suggestion.summary)} onKeep={() => setSummary(suggestionOriginal?.summary || "")} />
-                <SuggestionCard label="完整叙事" original={suggestionOriginal?.detail || rawDetail} suggestion={suggestion.detail} onAccept={() => setStory(suggestion.detail)} onKeep={() => setStory(suggestionOriginal?.detail || rawDetail)} large />
-                <SuggestionCard label="这件事对我的影响" original={suggestionOriginal?.lessons || "未填写"} suggestion={suggestion.lessons || "没有从原文中识别到明确影响"} onAccept={() => setLessons(suggestion.lessons)} onKeep={() => setLessons(suggestionOriginal?.lessons || "")} />
-                <div className="detected-facts"><span>情绪：<strong>{(suggestion.emotions?.length ? suggestion.emotions : [suggestion.emotion]).map(value => emotions.find(item => item[0] === value)?.[1]).filter(Boolean).join("、") || "平静"}</strong><button type="button" onClick={() => setSelectedEmotions(suggestion.emotions?.length ? suggestion.emotions : [suggestion.emotion])}>接受</button></span><span>阶段：<strong>{lifePhases.find(item => item[0] === suggestion.lifePhase)?.[1] || "无"}</strong><button type="button" onClick={() => setLifePhase(suggestion.lifePhase || "")}>接受</button></span><span>人物：<strong>{suggestion.people.join("、") || "未识别"}</strong><button type="button" onClick={() => setPeople(suggestion.people.join("，"))}>接受</button></span><span>标签：<strong>{suggestion.tags.join("、")}</strong><button type="button" onClick={() => setTags(suggestion.tags.join("，"))}>接受</button></span></div>
+              {suggestion && <div className="suggestions"><div className="suggestion-toolbar"><span>{suggestionTone !== tone ? "模板已更改，重新生成后会覆盖当前修改" : "已生成 7 项建议，均可直接编辑"}</span><button type="button" onClick={acceptAll}><Check size={14} />全部接受修改</button></div>
+                <SuggestionCard label="标题" original={suggestionOriginal?.title || "未填写"} suggestion={suggestion.title} onChange={value => setSuggestion(current => current ? { ...current, title: value } : current)} onAccept={() => setTitle(suggestion.title)} onKeep={() => setTitle(suggestionOriginal?.title || "")} />
+                <SuggestionCard label="一句话概括" original={suggestionOriginal?.summary || "未填写"} suggestion={suggestion.summary} onChange={value => setSuggestion(current => current ? { ...current, summary: value } : current)} onAccept={() => setSummary(suggestion.summary)} onKeep={() => setSummary(suggestionOriginal?.summary || "")} />
+                <SuggestionCard label="完整叙事" original={suggestionOriginal?.detail || rawDetail} suggestion={suggestion.detail} onChange={value => setSuggestion(current => current ? { ...current, detail: value } : current)} onAccept={() => setStory(suggestion.detail)} onKeep={() => setStory(suggestionOriginal?.detail || rawDetail)} large />
+                <SuggestionCard label="这件事对我的影响" original={suggestionOriginal?.lessons || "未填写"} suggestion={suggestion.lessons} placeholder="可以补充这件事对你的影响" onChange={value => setSuggestion(current => current ? { ...current, lessons: value } : current)} onAccept={() => setLessons(suggestion.lessons)} onKeep={() => setLessons(suggestionOriginal?.lessons || "")} />
+                <div className="detected-facts editable-facts">
+                  <label><span>主要情绪</span><div><select aria-label="编辑 AI 建议的主要情绪" value={suggestion.emotion} onChange={event => { const value = event.target.value; setSuggestion(current => current ? { ...current, emotion: value, emotions: [value, ...current.emotions.filter(item => item !== value)].slice(0, 6) } : current); }}>{emotions.map(item => <option value={item[0]} key={item[0]}>{item[1]}</option>)}</select><button type="button" aria-label="接受情绪建议" onClick={() => setSelectedEmotions(suggestion.emotions?.length ? suggestion.emotions : [suggestion.emotion])}>接受</button></div></label>
+                  <label><span>人生阶段</span><div><select aria-label="编辑 AI 建议的人生阶段" value={suggestion.lifePhase} onChange={event => setSuggestion(current => current ? { ...current, lifePhase: event.target.value } : current)}>{lifePhases.map(item => <option value={item[0]} key={item[0] || "none"}>{item[1]}</option>)}</select><button type="button" aria-label="接受阶段建议" onClick={() => setLifePhase(suggestion.lifePhase || "")}>接受</button></div></label>
+                  <label><span>人物</span><div><input aria-label="编辑 AI 建议的人物" value={suggestionPeopleText} onChange={event => { const value = event.target.value; setSuggestionPeopleText(value); setSuggestion(current => current ? { ...current, people: value.split(/[,，、]/).map(item => item.trim()).filter(Boolean).slice(0, 8) } : current); }} placeholder="用逗号分隔" /><button type="button" aria-label="接受人物建议" onClick={() => setPeople(suggestionPeopleText)}>接受</button></div></label>
+                  <label><span>标签</span><div><input aria-label="编辑 AI 建议的标签" value={suggestionTagsText} onChange={event => { const value = event.target.value; setSuggestionTagsText(value); setSuggestion(current => current ? { ...current, tags: value.split(/[,，、\s]+/).map(item => item.trim()).filter(Boolean).slice(0, 6) } : current); }} placeholder="用逗号分隔" /><button type="button" aria-label="接受标签建议" onClick={() => setTags(suggestionTagsText)}>接受</button></div></label>
+                </div>
               </div>}
             </section>
 
@@ -340,6 +347,6 @@ export default function MemoryEditor({ initial, coordinates, placeName, onClose,
   );
 }
 
-function SuggestionCard({ label, original, suggestion, onAccept, onKeep, large = false }: { label: string; original: string; suggestion: string; onAccept: () => void; onKeep: () => void; large?: boolean }) {
-  return <article className={`suggestion-card ${large ? "large" : ""}`}><header><strong>{label}</strong><div><button type="button" onClick={onAccept}><Check size={13} />接受</button><button type="button" onClick={onKeep}><RotateCcw size={13} />保留原文</button></div></header><div className="suggestion-compare"><div><small>原文</small><p>{original}</p></div><div><small>整理后</small><p>{suggestion}</p></div></div></article>;
+function SuggestionCard({ label, original, suggestion, placeholder, onChange, onAccept, onKeep, large = false }: { label: string; original: string; suggestion: string; placeholder?: string; onChange: (value: string) => void; onAccept: () => void; onKeep: () => void; large?: boolean }) {
+  return <article className={`suggestion-card editable ${large ? "large" : ""}`}><header><strong>{label}</strong><div><button type="button" onClick={onAccept}><Check size={13} />接受</button><button type="button" onClick={onKeep}><RotateCcw size={13} />保留原文</button></div></header><div className="suggestion-compare"><div><small>原文</small><p>{original}</p></div><div className="suggestion-edit"><small><Pencil size={11} />AI 整理后 · 可编辑</small><textarea aria-label={`编辑 AI 建议：${label}`} rows={large ? 8 : label === "标题" ? 2 : 4} value={suggestion} placeholder={placeholder} onChange={event => onChange(event.target.value)} /></div></div></article>;
 }

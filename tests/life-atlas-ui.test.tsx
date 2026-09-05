@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LifeEntry, LifeGoal, LifeProfile, LifeTrack } from "../app/lib/types";
@@ -121,6 +121,19 @@ describe("globe map experience workflows", () => {
     await user.type(screen.getByPlaceholderText(/发生了什么/), "我在这里走了很久，后来开始思考自己的生活节奏。");
     await user.click(screen.getByRole("button", { name: /帮我整理/ }));
     expect(await screen.findByText(/7 项建议/)).toBeTruthy();
+  });
+
+  it("AI 生成后的文字、人物和标签可以编辑再接受", async () => {
+    const user = userEvent.setup(); await renderReady(); await user.click(screen.getByTestId("mock-map")); await screen.findByText(/西湖区/); await user.click(screen.getByRole("button", { name: /记录这里/ }));
+    await user.type(screen.getByPlaceholderText(/发生了什么/), "我今天在西湖边认真思考了下一份工作的方向。希望先行动，再等待结果。");
+    await user.click(screen.getByRole("button", { name: /帮我整理/ }));
+    const summaryEditor = await screen.findByRole("textbox", { name: "编辑 AI 建议：一句话概括" });
+    await user.clear(summaryEditor); await user.type(summaryEditor, "我在西湖边重新确认了求职方向。");
+    await user.click(within(summaryEditor.closest("article")!).getByRole("button", { name: "接受" }));
+    const peopleEditor = screen.getByRole("textbox", { name: "编辑 AI 建议的人物" }); await user.type(peopleEditor, "自己");
+    await user.click(within(peopleEditor.closest("label")!).getByRole("button", { name: "接受人物建议" }));
+    await user.click(screen.getByRole("button", { name: /保存为私人记忆/ }));
+    await waitFor(() => expect(calls.some(call => call.url === "/api/entries" && call.method === "POST" && call.body?.summary === "我在西湖边重新确认了求职方向。" && call.body?.people === "自己")).toBe(true));
   });
 
   it("逐项接受建议后仍可恢复生成前的原文", async () => {
